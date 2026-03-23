@@ -44,7 +44,8 @@ export async function matchAndProcessDeposit(tx: mural.MuralTransaction): Promis
   const depositAmount = tx.amount.tokenAmount;
 
   // Find the best matching pending order (closest amount within tolerance)
-  const tolerance = 0.00001;
+  // 0.005 = half a cent, tight enough to avoid cross-order collisions with 1-cent steps
+  const tolerance = 0.005;
   const orders = await query<Order>(
     `SELECT * FROM orders
      WHERE status = 'pending'

@@ -46,8 +46,9 @@ async function allocateAdjustedAmount(baseAmount: number): Promise<number> {
   `);
   const row = await queryOne<{ value: string }>('SELECT value FROM merchant_config WHERE key = $1', ['order_counter']);
   const counter = parseInt(row?.value ?? '1', 10);
-  // Add counter * 0.000001 USDC — imperceptible to the user, useful for matching
-  return Math.round((baseAmount + counter * 0.000001) * 1_000_000) / 1_000_000;
+  // Add counter * 0.01 USDC (1 cent steps) — keeps amounts to 2 decimal places
+  // so customers can send the exact amount via any wallet or exchange UI.
+  return Math.round((baseAmount + counter * 0.01) * 100) / 100;
 }
 
 /**
