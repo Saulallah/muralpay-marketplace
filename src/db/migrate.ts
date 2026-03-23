@@ -63,15 +63,17 @@ CREATE INDEX IF NOT EXISTS idx_orders_adjusted_total ON orders(adjusted_total_us
 CREATE INDEX IF NOT EXISTS idx_orders_transaction_id ON orders(transaction_id);
 `;
 
+// Fixed UUIDs ensure ON CONFLICT (id) reliably prevents duplicate seeds
+// regardless of whether a UNIQUE constraint on name exists yet.
 const SEED_PRODUCTS = `
-INSERT INTO products (name, description, price_usdc, image_url)
+INSERT INTO products (id, name, description, price_usdc, image_url)
 VALUES
-  ('Artisan Coffee Bag', 'Premium single-origin Colombian coffee, 250g', 12.00, 'https://images.unsplash.com/photo-1509042239860-f550ce710b93?w=400'),
-  ('Handwoven Mochila Bag', 'Authentic wayuu handwoven bag from La Guajira', 45.00, 'https://images.unsplash.com/photo-1548036328-c9fa89d128fa?w=400'),
-  ('Colombian Emerald Pendant', 'Certified natural Colombian emerald pendant', 120.00, 'https://images.unsplash.com/photo-1611591437281-460bfbe1220a?w=400'),
-  ('Exotic Fruit Bundle', 'Seasonal exotic fruits: lulo, maracuya, guanabana', 8.00, 'https://images.unsplash.com/photo-1519996529931-28324d5a630e?w=400'),
-  ('Leather Wallet', 'Handcrafted leather wallet from Bogota artisans', 35.00, 'https://images.unsplash.com/photo-1627123424574-724758594e93?w=400')
-ON CONFLICT (name) DO NOTHING;
+  ('a1000000-0000-0000-0000-000000000001', 'Artisan Coffee Bag', 'Premium single-origin Colombian coffee, 250g', 12.00, 'https://images.unsplash.com/photo-1509042239860-f550ce710b93?w=400'),
+  ('a1000000-0000-0000-0000-000000000002', 'Handwoven Mochila Bag', 'Authentic wayuu handwoven bag from La Guajira', 45.00, 'https://images.unsplash.com/photo-1548036328-c9fa89d128fa?w=400'),
+  ('a1000000-0000-0000-0000-000000000003', 'Colombian Emerald Pendant', 'Certified natural Colombian emerald pendant', 120.00, 'https://images.unsplash.com/photo-1611591437281-460bfbe1220a?w=400'),
+  ('a1000000-0000-0000-0000-000000000004', 'Exotic Fruit Bundle', 'Seasonal exotic fruits: lulo, maracuya, guanabana', 8.00, 'https://images.unsplash.com/photo-1519996529931-28324d5a630e?w=400'),
+  ('a1000000-0000-0000-0000-000000000005', 'Leather Wallet', 'Handcrafted leather wallet from Bogota artisans', 35.00, 'https://images.unsplash.com/photo-1627123424574-724758594e93?w=400')
+ON CONFLICT (id) DO NOTHING;
 `;
 
 /**
