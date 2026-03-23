@@ -56,9 +56,21 @@ Each order gets a unique `adjusted_total_usdc = total_usdc + (counter × 0.00000
 `pending` → `paid` → `processing_withdrawal` → `withdrawn`
 On failure reverts to `paid` (withdrawal can be retried).
 
-## Deployment
-Railway — `railway.json` runs `npm run build && npm run db:migrate && npm start`.
-Set env vars in Railway dashboard. `APP_URL` should be the Railway public URL to enable webhook auto-registration.
+## Live deployment
+- **Railway URL**: `https://muralpay-marketplace-production.up.railway.app`
+- **GitHub**: `https://github.com/Saulallah/muralpay-marketplace`
+- **Database**: Neon PostgreSQL (project `small-night-18277679`)
+- Railway runs `npm run build && npm run db:migrate && npm start` on every deploy (`railway.json`)
+- Redeploy via Railway GraphQL API: `mutation { serviceInstanceDeploy(serviceId: "909d9aa1-0897-45ef-b9ca-df5f3f192e2c", environmentId: "b127b53a-41ba-4d56-8fa4-f3c3bb5e8135") }`
+
+## Provisioned sandbox resources
+| Resource | ID |
+|---|---|
+| Mural account | `2e67d3a5-0b7e-41f8-b36b-e555e55a96f8` |
+| Polygon wallet | `0x7Fd09B2f615C9c6bB20Ea6F1B553723B73940ea7` |
+| Counterparty | `44a8b102-87f3-4c86-ba04-b011186b2f7a` |
+| Payout method | `e6b4b096-ba04-4dc3-bdfb-7ce5ddce390f` |
+| Webhook | `9edf0ee5-50c5-4995-bc0e-80af78acd7b5` |
 
 ---
 

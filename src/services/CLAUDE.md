@@ -1,5 +1,14 @@
 # src/services/ — Mural API Reference & Gotchas
 
+## Sandbox funding (for end-to-end testing)
+To get testnet USDC into the merchant account:
+1. Log into **app-staging.muralpay.com**
+2. **Move Money → Deposit → Bank Accounts → USD** — select **Marketplace Main Account**
+3. Fake funds appear in ~1-2 minutes, no real money needed
+4. Then send to the marketplace wallet: **Move Money → Pay → +Add Contact**
+5. Add wallet address `0x7Fd09B2f615C9c6bB20Ea6F1B553723B73940ea7` (Polygon network)
+6. Send the **exact adjusted amount** shown in the order's `payment_instructions.amount_usdc`
+
 ## muralPay.ts — function index
 | Function | Method | Path |
 |----------|--------|------|

@@ -7,7 +7,7 @@
 
 ## db/
 - `index.ts` — exports `query<T>(sql, params)` and `queryOne<T>(sql, params)`. SSL enabled unless host is localhost.
-- `migrate.ts` — idempotent DDL + seed (5 Colombian products). Run standalone via `ts-node`.
+- `migrate.ts` — idempotent DDL + seed (5 Colombian products using fixed UUIDs). Run standalone via `ts-node`. See `db/CLAUDE.md` for seed idempotency details.
 
 ### Schema summary
 ```sql

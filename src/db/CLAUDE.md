@@ -9,9 +9,14 @@ Exported helpers:
 ## Migration
 `migrate.ts` is a standalone script — run via `npm run db:migrate` (`ts-node src/db/migrate.ts`).
 Uses `IF NOT EXISTS` everywhere — fully idempotent, safe to re-run.
-Seeds 5 Colombian marketplace products with `ON CONFLICT DO NOTHING`.
+Seeds 5 Colombian marketplace products with `ON CONFLICT (id) DO NOTHING`.
 
 Requires `pgcrypto` extension (for `gen_random_uuid()`). The migration creates it automatically.
+
+### Seed idempotency — important
+The seed uses **fixed UUIDs** (`a1000000-0000-0000-0000-00000000000{1-5}`) so `ON CONFLICT (id) DO NOTHING`
+reliably prevents duplicates on every re-run. Do NOT change the seed to use `gen_random_uuid()` —
+that was the original bug that caused 5 duplicate products to appear after each deploy.
 
 ## Schema notes
 
