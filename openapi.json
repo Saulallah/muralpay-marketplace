@@ -1,0 +1,419 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Mural Pay Marketplace API",
+    "version": "1.0.0",
+    "description": "Backend API for a marketplace application powered by Mural Pay. Supports product catalog, USDC checkout, payment detection, and automatic COP withdrawal."
+  },
+  "servers": [
+    {
+      "url": "https://your-deployed-app.railway.app",
+      "description": "Production"
+    },
+    {
+      "url": "http://localhost:3000",
+      "description": "Local development"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Optional. Set API_SECRET env var to require this on merchant endpoints."
+      }
+    },
+    "schemas": {
+      "Product": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "name": { "type": "string" },
+          "description": { "type": "string", "nullable": true },
+          "price_usdc": { "type": "number" },
+          "image_url": { "type": "string", "nullable": true },
+          "active": { "type": "boolean" },
+          "created_at": { "type": "string", "format": "date-time" },
+          "updated_at": { "type": "string", "format": "date-time" }
+        }
+      },
+      "Order": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "status": {
+            "type": "string",
+            "enum": ["pending", "paid", "processing_withdrawal", "withdrawn", "failed"]
+          },
+          "customer_name": { "type": "string" },
+          "customer_email": { "type": "string" },
+          "product": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string", "format": "uuid" },
+              "name": { "type": "string" }
+            }
+          },
+          "quantity": { "type": "integer" },
+          "unit_price_usdc": { "type": "number" },
+          "total_usdc": { "type": "number" },
+          "payment_amount_usdc": {
+            "type": "number",
+            "description": "The exact USDC amount the customer must send (slightly adjusted for matching)"
+          },
+          "deposit_wallet_address": { "type": "string" },
+          "transaction_hash": { "type": "string", "nullable": true },
+          "created_at": { "type": "string", "format": "date-time" },
+          "updated_at": { "type": "string", "format": "date-time" }
+        }
+      },
+      "PaymentInstructions": {
+        "type": "object",
+        "properties": {
+          "message": { "type": "string" },
+          "network": { "type": "string" },
+          "token": { "type": "string" },
+          "wallet_address": { "type": "string" },
+          "amount_usdc": { "type": "number" },
+          "warning": { "type": "string" }
+        }
+      },
+      "Withdrawal": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "order_id": { "type": "string", "format": "uuid" },
+          "mural_payout_request_id": { "type": "string" },
+          "status": {
+            "type": "string",
+            "enum": ["pending", "processing", "completed", "failed"]
+          },
+          "amount_usdc": { "type": "number" },
+          "customer_name": { "type": "string" },
+          "created_at": { "type": "string", "format": "date-time" },
+          "updated_at": { "type": "string", "format": "date-time" }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "properties": {
+          "error": { "type": "string" }
+        }
+      }
+    }
+  },
+  "paths": {
+    "/health": {
+      "get": {
+        "summary": "Health check",
+        "tags": ["System"],
+        "responses": {
+          "200": {
+            "description": "Service is healthy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": { "type": "string" },
+                    "timestamp": { "type": "string", "format": "date-time" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/products": {
+      "get": {
+        "summary": "List all active products",
+        "tags": ["Products"],
+        "responses": {
+          "200": {
+            "description": "List of products",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "products": {
+                      "type": "array",
+                      "items": { "$ref": "#/components/schemas/Product" }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Create a product (merchant only)",
+        "tags": ["Products"],
+        "security": [{ "BearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["name", "price_usdc"],
+                "properties": {
+                  "name": { "type": "string" },
+                  "description": { "type": "string" },
+                  "price_usdc": { "type": "number", "minimum": 0.000001 },
+                  "image_url": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created product",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "product": { "$ref": "#/components/schemas/Product" }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "description": "Validation error", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    },
+    "/products/{id}": {
+      "get": {
+        "summary": "Get a product by ID",
+        "tags": ["Products"],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Product",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "product": { "$ref": "#/components/schemas/Product" }
+                  }
+                }
+              }
+            }
+          },
+          "404": { "description": "Not found", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      },
+      "delete": {
+        "summary": "Deactivate a product (merchant only)",
+        "tags": ["Products"],
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }
+        ],
+        "responses": {
+          "200": { "description": "Product deactivated" },
+          "404": { "description": "Not found" }
+        }
+      }
+    },
+    "/orders": {
+      "post": {
+        "summary": "Create an order and get payment instructions",
+        "tags": ["Orders"],
+        "description": "Creates an order. Returns a Polygon wallet address and exact USDC amount to send.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["product_id", "customer_name", "customer_email"],
+                "properties": {
+                  "product_id": { "type": "string", "format": "uuid" },
+                  "quantity": { "type": "integer", "minimum": 1, "default": 1 },
+                  "customer_name": { "type": "string" },
+                  "customer_email": { "type": "string", "format": "email" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Order created with payment instructions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "order": { "$ref": "#/components/schemas/Order" },
+                    "payment_instructions": { "$ref": "#/components/schemas/PaymentInstructions" }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "description": "Validation error" },
+          "404": { "description": "Product not found" },
+          "503": { "description": "Merchant account not yet initialized" }
+        }
+      }
+    },
+    "/orders/{id}": {
+      "get": {
+        "summary": "Get an order by ID (customer-facing)",
+        "tags": ["Orders"],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Order",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "order": { "$ref": "#/components/schemas/Order" }
+                  }
+                }
+              }
+            }
+          },
+          "404": { "description": "Not found" }
+        }
+      }
+    },
+    "/merchant/orders": {
+      "get": {
+        "summary": "List all orders (merchant)",
+        "tags": ["Merchant"],
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "All orders",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "orders": {
+                      "type": "array",
+                      "items": { "$ref": "#/components/schemas/Order" }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/merchant/orders/{id}": {
+      "get": {
+        "summary": "Get a single order with withdrawal detail (merchant)",
+        "tags": ["Merchant"],
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }
+        ],
+        "responses": {
+          "200": { "description": "Order with withdrawal" },
+          "404": { "description": "Not found" }
+        }
+      }
+    },
+    "/merchant/withdrawals": {
+      "get": {
+        "summary": "List all COP withdrawals with live status (merchant)",
+        "tags": ["Merchant"],
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "All withdrawals",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "withdrawals": {
+                      "type": "array",
+                      "items": { "$ref": "#/components/schemas/Withdrawal" }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/merchant/withdrawals/{id}": {
+      "get": {
+        "summary": "Get a withdrawal with live Mural status (merchant)",
+        "tags": ["Merchant"],
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }
+        ],
+        "responses": {
+          "200": { "description": "Withdrawal with live Mural payout status" },
+          "404": { "description": "Not found" }
+        }
+      }
+    },
+    "/merchant/account": {
+      "get": {
+        "summary": "Get Mural account info and balance (merchant)",
+        "tags": ["Merchant"],
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "200": { "description": "Mural account details" }
+        }
+      }
+    },
+    "/merchant/config": {
+      "get": {
+        "summary": "Get stored merchant configuration (merchant)",
+        "tags": ["Merchant"],
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "200": { "description": "Key-value config map" }
+        }
+      }
+    },
+    "/webhooks/mural": {
+      "post": {
+        "summary": "Mural Pay webhook receiver",
+        "tags": ["Webhooks"],
+        "description": "Receives MURAL_ACCOUNT_BALANCE_ACTIVITY and PAYOUT_REQUEST events from Mural Pay.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "category": { "type": "string" },
+                  "type": { "type": "string" },
+                  "data": { "type": "object" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Acknowledged" }
+        }
+      }
+    }
+  }
+}
