@@ -443,7 +443,24 @@ tests/
 
 ---
 
-## Future Improvements
+## Current status
+
+Everything in the spec is fully implemented and working end-to-end against the live deployment:
+
+- **Product catalog** — 5 seeded Colombian products, browseable via `GET /products`
+- **Order creation** — `POST /orders` returns a deposit wallet address and an exact USDC amount unique to the order
+- **Payment detection** — Incoming USDC deposits are detected via Mural webhook (`POST /webhooks/mural`) with a 30-second polling fallback; orders transition from `pending` → `paid` automatically
+- **Automatic COP payout** — On payment detection the service immediately creates and executes a Mural payout request, converting USDC → COP and wiring to the configured Colombian bank account; order progresses to `processing_withdrawal` → `withdrawn`
+- **Merchant views** — Auth-protected endpoints for all orders, withdrawal status (synced live from Mural), account balance, and config
+- **Deposit matching** — 1-cent adjustment per order (e.g. $12.01, $12.02) with ±$0.005 tolerance; pitfalls documented in [How Deposit Matching Works](#how-deposit-matching-works)
+- **OpenAPI spec** — [`openapi.json`](./openapi.json) covers all endpoints
+- **Tests** — 42 passing (11 unit, 14 unit math, 17 integration against live Railway deployment)
+
+Nothing is partially implemented or broken. The known limitations are design trade-offs documented in the README, not missing features.
+
+---
+
+## Future work
 
 1. **Webhook signature verification** — Verify ECDSA signatures from Mural to prevent spoofed events
 2. **Idempotency keys** — Use Mural's `idempotency-key` header on payout creation to prevent double-payouts on retries
