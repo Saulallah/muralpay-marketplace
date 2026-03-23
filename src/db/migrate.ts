@@ -54,6 +54,9 @@ CREATE TABLE IF NOT EXISTS merchant_config (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- Ensure products.name is unique (handles existing DBs that predate this constraint)
+ALTER TABLE products ADD CONSTRAINT IF NOT EXISTS products_name_unique UNIQUE (name);
+
 -- Index for fast order matching by adjusted amount + status
 CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);
 CREATE INDEX IF NOT EXISTS idx_orders_adjusted_total ON orders(adjusted_total_usdc);
