@@ -31,8 +31,22 @@ interface Order {
  * - Very old pending orders might match a new unrelated deposit
  */
 export async function matchAndProcessDeposit(tx: mural.MuralTransaction): Promise<void> {
-  // Only process deposit transactions
-  if ((tx.transactionDetails as { type: string }).type !== 'deposit') return;
+  // Process both 'deposit' (bank→USDC) and incoming 'payout' (wallet transfer) types.
+  // Mural classifies incoming USDC transfers as 'payout', not 'deposit'.
+  // Skip payout transactions that originated from our own wallet — those are our outgoing withdrawals.
+  const txType = (tx.transactionDetails as { type: string }).type;
+  if (txType !== 'deposit' && txType !== 'payout') {
+    console.log(`[PaymentProcessor] Skipping tx ${tx.id} — unhandled type '${txType}'`);
+    return;
+  }
+  if (txType === 'payout') {
+    const senderAddress = (tx.transactionDetails as { details?: { senderAddress?: string } }).details?.senderAddress;
+    const walletRow = await queryOne<{ value: string }>('SELECT value FROM merchant_config WHERE key = $1', ['wallet_address']);
+    if (walletRow && senderAddress && senderAddress.toLowerCase() === walletRow.value.toLowerCase()) {
+      console.log(`[PaymentProcessor] Skipping tx ${tx.id} — outgoing payout from our own wallet`);
+      return;
+    }
+  }
 
   // Check if we already processed this transaction
   const existing = await queryOne<Order>(
@@ -63,13 +77,18 @@ export async function matchAndProcessDeposit(tx: mural.MuralTransaction): Promis
   const order = orders[0];
   console.log(`[PaymentProcessor] Matched deposit ${tx.id} (${depositAmount} USDC) to order ${order.id}`);
 
-  // Mark the order as paid
-  await query(
+  // Mark the order as paid — only if it's still pending (guards against concurrent processing)
+  const updated = await query<{ id: string }>(
     `UPDATE orders
      SET status = 'paid', transaction_hash = $1, transaction_id = $2, updated_at = NOW()
-     WHERE id = $3`,
+     WHERE id = $3 AND status = 'pending'
+     RETURNING id`,
     [tx.hash, tx.id, order.id]
   );
+  if (updated.length === 0) {
+    console.log(`[PaymentProcessor] Order ${order.id} already claimed by another process, skipping`);
+    return;
+  }
 
   // Trigger withdrawal (fire and don't block)
   initiateWithdrawal(order.id, order.mural_account_id, depositAmount).catch((err) => {
@@ -131,7 +150,8 @@ export async function initiateWithdrawal(
       [withdrawalStatus, payoutRequest.id]
     );
 
-    const orderStatus = executed.status === 'EXECUTED' || executed.status === 'PENDING' ? 'withdrawn' : 'processing_withdrawal';
+    // Only mark as withdrawn when EXECUTED — PENDING means still in flight
+    const orderStatus = executed.status === 'EXECUTED' ? 'withdrawn' : 'processing_withdrawal';
     await query(`UPDATE orders SET status = $1, updated_at = NOW() WHERE id = $2`, [orderStatus, orderId]);
 
     console.log(`[PaymentProcessor] Payout ${payoutRequest.id} executed with status ${executed.status} for order ${orderId}`);
@@ -200,8 +220,8 @@ export async function syncWithdrawalStatuses(): Promise<void> {
 function mapPayoutStatusFinal(muralStatus: string): string {
   switch (muralStatus) {
     case 'AWAITING_EXECUTION': return 'pending';
-    case 'PENDING':
-    case 'EXECUTED': return 'processing';
+    case 'PENDING': return 'processing';
+    case 'EXECUTED': return 'completed'; // funds have been sent to bank
     case 'FAILED':
     case 'CANCELED': return 'failed';
     default: return 'pending';

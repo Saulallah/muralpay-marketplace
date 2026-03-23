@@ -16,9 +16,8 @@ const router = Router();
 router.post('/mural', async (req: Request, res: Response) => {
   try {
     const event = req.body as {
-      category?: string;
-      type?: string;
-      data?: unknown;
+      eventCategory?: string;
+      payload?: unknown;
     };
 
     console.log('[Webhook] Received event:', JSON.stringify(event).slice(0, 200));
@@ -27,7 +26,7 @@ router.post('/mural', async (req: Request, res: Response) => {
     res.status(200).json({ received: true });
 
     // Process asynchronously
-    handleWebhookEvent(event).catch((err) => {
+    handleWebhookEvent(event as { eventCategory?: string; payload?: unknown }).catch((err) => {
       console.error('[Webhook] Handler error:', err);
     });
   } catch (err) {
@@ -42,12 +41,12 @@ router.post('/mural', async (req: Request, res: Response) => {
  * to matchAndProcessDeposit(). PAYOUT_REQUEST events are ignored here since payout
  * status is handled by the periodic sync job.
  */
-async function handleWebhookEvent(event: { category?: string; type?: string; data?: unknown }): Promise<void> {
-  const category = event.category;
+async function handleWebhookEvent(event: { eventCategory?: string; payload?: unknown }): Promise<void> {
+  const category = event.eventCategory;
 
   if (category === 'MURAL_ACCOUNT_BALANCE_ACTIVITY') {
-    // The data contains a Transaction object
-    const tx = event.data as MuralTransaction;
+    // The payload contains a Transaction object
+    const tx = event.payload as MuralTransaction;
     if (tx) {
       console.log(`[Webhook] Balance activity — tx ${tx.id}, type ${(tx.transactionDetails as { type: string })?.type}, amount ${tx.amount?.tokenAmount} ${tx.amount?.tokenSymbol}`);
       await matchAndProcessDeposit(tx);

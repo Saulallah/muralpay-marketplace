@@ -1,13 +1,24 @@
 # src/services/ — Mural API Reference & Gotchas
 
-## Sandbox funding (for end-to-end testing)
-To get testnet USDC into the merchant account:
+## Sandbox funding & end-to-end test flow
+
+### Step 1 — Fund the sending account
 1. Log into **app-staging.muralpay.com**
-2. **Move Money → Deposit → Bank Accounts → USD** — select **Marketplace Main Account**
-3. Fake funds appear in ~1-2 minutes, no real money needed
-4. Then send to the marketplace wallet: **Move Money → Pay → +Add Contact**
+2. **Move Money → Deposit → Bank Accounts → USD** — select **"Main Account"** (NOT Marketplace Main Account)
+3. Fake funds appear in ~1-2 minutes
+
+### Step 2 — Send USDC to the marketplace wallet
+4. **Move Money → Pay → +Add Contact**
 5. Add wallet address `0x7Fd09B2f615C9c6bB20Ea6F1B553723B73940ea7` (Polygon network)
-6. Send the **exact adjusted amount** shown in the order's `payment_instructions.amount_usdc`
+6. Send **FROM "Main Account"** (not Marketplace Main Account) the **exact adjusted amount** from `payment_instructions.amount_usdc`
+
+> **Critical gotcha — sending direction:** Sending FROM the Marketplace Main Account TO its own wallet is an outgoing `payout` originating from our wallet — it gets filtered as an outgoing withdrawal and ignored. You MUST send FROM a **separate** account (e.g. "Main Account") so the `senderAddress` differs from our wallet.
+
+### Step 3 — Monitor the order
+```bash
+curl https://muralpay-marketplace-production.up.railway.app/merchant/orders | jq '[.orders[] | {status, customer_name, total_usdc}]'
+```
+Expected progression: `pending` → `paid` → `processing_withdrawal` → `withdrawn`
 
 ## muralPay.ts — function index
 | Function | Method | Path |
@@ -76,6 +87,11 @@ interface MuralPayoutMethod {
 ### 7. Account status starts as INITIALIZING
 Newly created accounts have `status: "INITIALIZING"`. The wallet address is only available once status is `"ACTIVE"`. Bootstrap polls every 5s, up to 12 times (60s total).
 
+### 8. Mural classifies ALL crypto wallet transfers as `payout`, not `deposit`
+`searchTransactions` returns both bank-to-USDC conversions (`deposit` type) and all crypto wallet transfers (`payout` type — including incoming ones). `paymentProcessor.ts` now accepts both types. Outgoing withdrawals are filtered by checking `senderAddress` against the merchant wallet stored in `merchant_config.wallet_address`.
+
+If you send FROM the Marketplace Main Account TO its own wallet, the transaction appears as a `payout` originating FROM our wallet and is correctly filtered out. Always simulate customer payments by sending FROM a **separate** account INTO the marketplace wallet.
+
 ## COP payout method details structure
 ```typescript
 {
@@ -94,14 +110,26 @@ Newly created accounts have `status: "INITIALIZING"`. The wallet address is only
 ```
 
 ## Payout status mapping (Mural → internal)
-| Mural status | Internal status |
+
+Two separate mapping functions exist — one used right after execution, one used by the sync job:
+
+**After `executePayoutRequest()` — `mapPayoutStatus()`:**
+| Mural status | Withdrawal status | Order status |
+|---|---|---|
+| AWAITING_EXECUTION | pending | processing_withdrawal |
+| PENDING | processing | processing_withdrawal |
+| EXECUTED | processing | withdrawn |
+| FAILED / CANCELED | failed | paid (reverted) |
+
+**During `syncWithdrawalStatuses()` — `mapPayoutStatusFinal()`:**
+| Mural status | Withdrawal status |
 |---|---|
 | AWAITING_EXECUTION | pending |
 | PENDING | processing |
-| EXECUTED | processing (funds in transit) |
+| EXECUTED | **completed** → also flips order to `withdrawn` |
 | FAILED / CANCELED | failed |
 
-Final `completed` status is set when the Mural status is confirmed as fully settled (checked in syncWithdrawalStatuses).
+> `EXECUTED` is Mural's terminal success state. Right after execution the withdrawal is `processing` (funds in transit). The sync job later confirms it as `completed` once the status is re-fetched as `EXECUTED`.
 
 ## bootstrap.ts — what it does
 1. Finds or creates Mural account (prefers `isApiEnabled: true` + name "Marketplace Main Account")

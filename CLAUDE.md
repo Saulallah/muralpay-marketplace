@@ -11,10 +11,13 @@ TypeScript/Express backend for the Mural Pay coding challenge. Customers browse 
 
 ## Key scripts
 ```
-npm run dev          # ts-node-dev hot reload
-npm run build        # tsc → dist/
-npm start            # node dist/index.js
-npm run db:migrate   # creates tables + seeds 5 products (idempotent)
+npm run dev              # ts-node-dev hot reload
+npm run build            # tsc → dist/
+npm start                # node dist/index.js
+npm run db:migrate       # creates tables + seeds 5 products (idempotent)
+npm test                 # all tests (unit + integration)
+npm run test:unit        # unit tests only — no network, fast
+npm run test:integration # integration tests against live Railway URL
 ```
 
 ## Architecture
@@ -26,9 +29,9 @@ src/db/               pg pool + query helpers + migration
 src/services/
   muralPay.ts         Mural API client (all HTTP calls live here)
   bootstrap.ts        startup provisioning (account/counterparty/webhook)
-  paymentProcessor.ts deposit matching + payout initiation
+  paymentProcessor.ts deposit matching + payout initiation + status sync
 src/routes/
-  products.ts         GET /products
+  products.ts         GET/POST/DELETE /products (price_usdc returned as float)
   orders.ts           POST /orders, GET /orders/:id
   merchant.ts         merchant-only endpoints (auth guarded)
   webhooks.ts         POST /webhooks/mural
@@ -36,6 +39,9 @@ src/jobs/
   pollTransactions.ts 30s polling fallback for deposit detection
 src/middleware/
   auth.ts             Bearer token guard (skipped if API_SECRET unset)
+tests/
+  unit/               pure logic tests — no DB/network (Jest + ts-jest)
+  integration/        live HTTP tests against Railway endpoint
 ```
 
 ## Env vars (see .env)
@@ -50,7 +56,9 @@ src/middleware/
 | MERCHANT_* | yes | COP bank details for the merchant payout method |
 
 ## Payment matching strategy
-Each order gets a unique `adjusted_total_usdc = total_usdc + (counter × 0.000001)` where `counter` is 0–99, stored in `merchant_config.order_counter` (atomic increment, wraps at 99). Incoming deposits are matched to pending orders within 0.00001 USDC tolerance, closest match first, then oldest.
+Each order gets a unique `adjusted_total_usdc = total_usdc + (counter × 0.01)` where `counter` is 1–99, stored in `merchant_config.order_counter` (atomic increment, wraps at 99). This keeps amounts to 2 decimal places (e.g. `12.05`) so customers can enter the exact amount in any wallet UI. Incoming deposits are matched to pending orders within **0.005 USDC** tolerance (half a cent), closest match first, then oldest.
+
+> **Why 2 decimal places?** Mural's UI only accepts amounts to 2 decimal places. The original 6-decimal approach (e.g. `12.000004`) couldn't be entered by the customer.
 
 ## Order lifecycle
 `pending` → `paid` → `processing_withdrawal` → `withdrawn`
@@ -62,6 +70,10 @@ On failure reverts to `paid` (withdrawal can be retried).
 - **Database**: Neon PostgreSQL (project `small-night-18277679`)
 - Railway runs `npm run build && npm run db:migrate && npm start` on every deploy (`railway.json`)
 - Redeploy via Railway GraphQL API: `mutation { serviceInstanceDeploy(serviceId: "909d9aa1-0897-45ef-b9ca-df5f3f192e2c", environmentId: "b127b53a-41ba-4d56-8fa4-f3c3bb5e8135") }`
+- **`serviceInstanceDeploy` redeploys the last snapshot, NOT the latest commit.** To deploy new code, use `railway up` with the project token instead:
+  ```
+  RAILWAY_TOKEN=56cd03dc-10c0-4290-9d8d-af5ccc26da03 railway up --service muralpay-marketplace
+  ```
 
 ## Provisioned sandbox resources
 | Resource | ID |

@@ -30,10 +30,10 @@ interface Order {
 
 /**
  * Allocate a unique adjusted amount for an order by using an atomic counter.
- * Adds a tiny fractional increment (0.000001 * counter) to base amount so that
- * each pending order has a slightly different total — enabling deposit matching.
+ * Adds counter × 0.01 USDC (1-cent steps) to the base amount so that each
+ * pending order has a unique 2-decimal-place total — enabling deposit matching.
  *
- * Counter wraps at 99 to keep the adjustment < 0.0001 USDC.
+ * Counter wraps at 99, so adjustments are always in the range +0.01 to +0.99 USDC.
  */
 async function allocateAdjustedAmount(baseAmount: number): Promise<number> {
   // Atomically increment and get counter

@@ -21,15 +21,17 @@ that was the original bug that caused 5 duplicate products to appear after each 
 ## Schema notes
 
 ### orders.adjusted_total_usdc
-Stored as `DECIMAL(18,6)`. The per-order unique amount is `total_usdc + (counter × 0.000001)`.
-The counter comes from `merchant_config.order_counter` (0–99, incremented atomically, wraps):
+Stored as `DECIMAL(18,6)`. The per-order unique amount is `total_usdc + (counter × 0.01)` (1-cent steps).
+The counter comes from `merchant_config.order_counter` (1–99, incremented atomically, wraps at 99):
 ```sql
 INSERT INTO merchant_config (key, value, updated_at)
-VALUES ('order_counter', '0', NOW())
+VALUES ('order_counter', '1', NOW())
 ON CONFLICT (key) DO UPDATE
-  SET value = ((merchant_config.value::int + 1) % 100)::text, updated_at = NOW()
-RETURNING value
+  SET value = (CAST(merchant_config.value AS INT) % 99 + 1)::TEXT,
+      updated_at = NOW()
 ```
+The result is always 2 decimal places (e.g. `12.01`, `12.02`…`12.99`) — required because Mural's UI
+only accepts amounts to 2 decimal places. The matching tolerance in `paymentProcessor.ts` is **0.005 USDC**.
 
 ### Key indexes
 - `idx_orders_status` on `orders(status)` — for polling pending orders

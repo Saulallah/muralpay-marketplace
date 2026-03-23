@@ -24,7 +24,9 @@ router.get('/', async (_req: Request, res: Response) => {
     const products = await query<Product>(
       'SELECT * FROM products WHERE active = true ORDER BY created_at ASC'
     );
-    res.json({ products });
+    res.json({
+      products: products.map((p) => ({ ...p, price_usdc: parseFloat(p.price_usdc) })),
+    });
   } catch (err) {
     console.error('[Products] GET /', err);
     res.status(500).json({ error: 'Failed to fetch products' });
@@ -45,7 +47,7 @@ router.get('/:id', async (req: Request, res: Response) => {
       res.status(404).json({ error: 'Product not found' });
       return;
     }
-    res.json({ product });
+    res.json({ product: { ...product, price_usdc: parseFloat(product.price_usdc) } });
   } catch (err) {
     console.error('[Products] GET /:id', err);
     res.status(500).json({ error: 'Failed to fetch product' });
