@@ -5,7 +5,7 @@ CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
 CREATE TABLE IF NOT EXISTS products (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  name TEXT NOT NULL,
+  name TEXT NOT NULL UNIQUE,
   description TEXT,
   price_usdc DECIMAL(18,6) NOT NULL,
   image_url TEXT,
@@ -68,7 +68,7 @@ VALUES
   ('Colombian Emerald Pendant', 'Certified natural Colombian emerald pendant', 120.00, 'https://images.unsplash.com/photo-1611591437281-460bfbe1220a?w=400'),
   ('Exotic Fruit Bundle', 'Seasonal exotic fruits: lulo, maracuya, guanabana', 8.00, 'https://images.unsplash.com/photo-1519996529931-28324d5a630e?w=400'),
   ('Leather Wallet', 'Handcrafted leather wallet from Bogota artisans', 35.00, 'https://images.unsplash.com/photo-1627123424574-724758594e93?w=400')
-ON CONFLICT DO NOTHING;
+ON CONFLICT (name) DO NOTHING;
 `;
 
 /**
